@@ -1,0 +1,16 @@
+const express=require('express');
+const mongoose=require('mongoose');
+const cors=require('cors');
+const app=express(); app.use(cors()); app.use(express.json({limit:'64kb'}));
+const Dealer=mongoose.model('Dealer',new mongoose.Schema({id:{type:Number,unique:true,required:true},name:String,city:String,state:String}));
+const Review=mongoose.model('Review',new mongoose.Schema({dealerId:{type:Number,required:true},author:String,review:String,sentiment:String,createdAt:{type:Date,default:Date.now}}));
+const seed=[{id:1,name:'Prairie Ford Center',city:'Wichita',state:'Kansas'},{id:2,name:'Sunset Motors',city:'Topeka',state:'Kansas'},{id:3,name:'Lakeside Auto Group',city:'Chicago',state:'Illinois'},{id:4,name:'Summit Road Cars',city:'Denver',state:'Colorado'},{id:5,name:'Seaside Auto',city:'San Diego',state:'California'}];
+const classify=text=>{const s=text.toLowerCase(); const pos=['great','good','excellent','helpful','friendly','love','easy'];const neg=['bad','poor','slow','rude','terrible','awful'];const p=pos.filter(w=>s.includes(w)).length;const n=neg.filter(w=>s.includes(w)).length;return p>n?'positive':n>p?'negative':'neutral'};
+app.get('/health',(_req,res)=>res.json({ok:true}));
+app.get('/fetchDealers',async(_req,res)=>res.json(await Dealer.find({},{_id:0,__v:0}).lean()));
+app.get('/fetchDealer/:id',async(req,res)=>{const dealer=await Dealer.findOne({id:Number(req.params.id)},{_id:0,__v:0}).lean();return dealer?res.json(dealer):res.status(404).json({error:'Dealer not found'})});
+app.get('/fetchReviews',async(_req,res)=>res.json(await Review.find({},{_id:0,__v:0}).sort({createdAt:-1}).lean()));
+app.get('/fetchReview/dealer/:id',async(req,res)=>res.json(await Review.find({dealerId:Number(req.params.id)},{_id:0,__v:0}).sort({createdAt:-1}).lean()));
+app.get('/fetchDealers/:state',async(req,res)=>{const all=await Dealer.find({},{_id:0,__v:0}).lean();res.json(all.filter(d=>d.state.toLowerCase()===req.params.state.toLowerCase()))});
+app.post('/insertReview',async(req,res)=>{const {dealerId,author,review}=req.body; if(!Number.isInteger(dealerId)||typeof author!=='string'||!author.trim()||typeof review!=='string'||!review.trim()||review.length>2000)return res.status(400).json({error:'Invalid review'}); const dealer=await Dealer.exists({id:dealerId});if(!dealer)return res.status(404).json({error:'Dealer not found'});const r=await Review.create({dealerId,author:author.trim().slice(0,80),review:review.trim(),sentiment:classify(review)});res.status(201).json({id:String(r._id),dealerId:r.dealerId,author:r.author,review:r.review,sentiment:r.sentiment});});
+async function start(){await mongoose.connect(process.env.MONGO_URL||'mongodb://localhost:27017/dealership');if(await Dealer.countDocuments()===0)await Dealer.insertMany(seed);if(await Review.countDocuments()===0)await Review.insertMany([{dealerId:1,author:'Alex',review:'Friendly staff and great service!',sentiment:'positive'},{dealerId:1,author:'Jordan',review:'Good selection and helpful employees.',sentiment:'positive'},{dealerId:3,author:'Taylor',review:'Slow appointment process.',sentiment:'negative'}]);app.listen(3000,'0.0.0.0',()=>console.log('Dealers API listening on 3000'))};start().catch(e=>{console.error(e);process.exit(1)});

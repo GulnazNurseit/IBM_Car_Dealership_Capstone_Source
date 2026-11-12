@@ -1,0 +1,38 @@
+services:
+  mongo:
+    image: mongo:7
+    volumes: [mongo_data:/data/db]
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 15
+  dealers:
+    build: ./services/dealers
+    ports: ["3000:3000"]
+    environment:
+      MONGO_URL: mongodb://mongo:27017/dealership
+    depends_on:
+      mongo: {condition: service_healthy}
+  sentiment:
+    build: ./services/sentiment
+    ports: ["5000:5000"]
+  django:
+    build: ./server
+    command: sh -c "python manage.py migrate && python manage.py runserver 0.0.0.0:8000"
+    ports: ["8000:8000"]
+    environment:
+      DJANGO_DEBUG: "1"
+      DJANGO_SECRET_KEY: "local-dev-key-do-not-deploy"
+      DJANGO_ALLOWED_HOSTS: "localhost,127.0.0.1,django"
+      DEALER_SERVICE_URL: http://dealers:3000
+      SENTIMENT_SERVICE_URL: http://sentiment:5000
+    depends_on: [dealers, sentiment]
+  frontend:
+    build: ./frontend
+    ports: ["5173:5173"]
+    environment:
+      VITE_DJANGO_URL: http://localhost:8000
+    depends_on: [django]
+volumes:
+  mongo_data:

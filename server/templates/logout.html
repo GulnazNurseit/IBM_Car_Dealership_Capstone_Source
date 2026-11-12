@@ -1,0 +1,1 @@
+{% extends 'base.html' %}{% block content %}<section class="auth"><h1>Log out?</h1><p>Are you sure you want to end your session?</p><form method="post">{% csrf_token %}<button type="submit">Confirm logout</button></form></section>{% endblock %}
